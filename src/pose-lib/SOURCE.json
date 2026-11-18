@@ -1,0 +1,31 @@
+{
+ "source": "lab/xrift-avatar-pose-control (MIT, Copyright (c) 2026 toM7x7)",
+ "labHead": "6584877f663e9fed54399bae814f15578bd9034a",
+ "labUncommittedPaths": 3,
+ "syncedAt": "2026-11-12T11:12:24.248Z",
+ "files": {
+  "vendor/render-pose.mjs": "077da6f171060fb4",
+  "vendor/render-pose.d.mts": "fcb544cee526837a",
+  "vendor/torso-support.mjs": "b3bc14249e9b95be",
+  "vendor/torso-support.d.mts": "e1f453e986b88e54",
+  "adapters/xrift.mjs": "718462a2a37bcfbb",
+  "adapters/xrift.d.mts": "4259f0b03db4c298",
+  "humanoid-inference.mjs": "33f819a3d6dbd03c",
+  "humanoid-inference.d.mts": "756a823f51df4cd7",
+  "role-inference.mjs": "cca3b3a6f038ef40",
+  "role-inference.d.mts": "b901e01eb7354152",
+  "authoring/math.mjs": "1babda9e80abc058",
+  "authoring/rig.mjs": "c2e4babbe39e5619",
+  "authoring/rig.d.mts": "7bbef4a3bdbaa536",
+  "authoring/arm.mjs": "58dcac135071d611",
+  "authoring/arm.d.mts": "87182e738141b77a",
+  "authoring/hand.mjs": "4a6c8b78758e8637",
+  "authoring/hand.d.mts": "1e06cc073afac92c",
+  "authoring/solve.mjs": "dd796ed9ec64702f",
+  "authoring/solve.d.mts": "57c88a8b57d3b403",
+  "authoring/clip.mjs": "eadaa7f39e0205a6",
+  "authoring/clip.d.mts": "f9f6f22f4bd3e7f5",
+  "authoring/types.d.mts": "3f0cc1f1f609f16c",
+  "specs/charge-wave.v1.json": "7d33f4a906ea2ed7"
+ }
+}

@@ -1,0 +1,5 @@
+node_modules
+dist
+output
+.xrift
+making/scripts/humangen/logs
