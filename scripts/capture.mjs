@@ -380,16 +380,16 @@ const scenarios={
   await step(page,2.2)
   // C: a line, said with the voice and the jaw; shown on my strip
   const blips0=(await report(page)).blips
-  await press('KeyC');let jaw=0
+  await press('KeyR');let jaw=0
   for(let i=0;i<10;i++){await step(page,0.2);const q=await B();jaw=Math.max(jaw,q.follow.jaw)}
   const r=await report(page),strip=await page.evaluate(()=>window.__villager.hintText())
-  check('C: he says a line (voice and jaw), and I can read it',r.blips>blips0&&jaw>0.02&&strip.length>hint.length,{blips:r.blips-blips0,jaw:r3(jaw),strip})
+  check('R: he says a line (voice and jaw), and I can read it',r.blips>blips0&&jaw>0.02&&strip.length>hint.length,{blips:r.blips-blips0,jaw:r3(jaw),strip})
   await shot(page,'henshin-say-0')
   await step(page,6)
   // V: the next of his idle gestures each time
   const seen=[]
-  for(let i=0;i<2;i++){await press('KeyV');await step(page,1.2);seen.push((await B()).gesture);await shot(page,'henshin-idle-'+i);await step(page,6.5)}
-  check('V: a different gesture each time',seen[0]&&seen[1]&&seen[0]!==seen[1],{seen})
+  for(let i=0;i<2;i++){await press('KeyF');await step(page,1.2);seen.push((await B()).gesture);await shot(page,'henshin-idle-'+i);await step(page,6.5)}
+  check('F: a different gesture each time',seen[0]&&seen[1]&&seen[0]!==seen[1],{seen})
   // somebody else wears him: what they ask for arrives from the room; nobody else can make him do things
   await page.evaluate(()=>window.__villager.wear('user-a'))
   await step(page,0.5)
