@@ -347,6 +347,65 @@ const scenarios={
   check('the wearer leaves the room: he is let go',d.status==='off'&&await page.evaluate(()=>window.__villager.text(':mat'))==='村人Aになる',{status:d.status})
   await page.close()
  },
+ /** worn: his size for each viewer, and what the wearer can make him do (keys, the room, the key strip) */
+ async henshin(){
+  const page=await open('lab&wear',{width:640,height:560})
+  await page.evaluate(()=>{window.__villager.eyes([0,1.6,40])})
+  await page.waitForFunction(()=>window.__villager.shown('user-me').meshes>0&&window.__villager.shown('user-a').meshes>0,null,{timeout:30000})
+  await at(page,7000,1)
+  const B=()=>page.evaluate(()=>window.__villager.bridge().debug())
+  const press=code=>page.evaluate(c=>window.__villager.key(c),code)
+  check('a key does nothing while I do not wear him',await press('KeyZ')===false)
+  await page.evaluate(()=>window.__villager.wear('user-me'))
+  await step(page,0.5)
+  let d=await B()
+  check('third person: he is his own size',Math.abs(d.scale-1)<0.01,{scale:r3(d.scale)})
+  await page.evaluate(()=>window.__villager.viewpoint('first-person',true));await step(page,0.1)
+  const fp=(await B()).scale
+  await page.evaluate(()=>window.__villager.viewpoint('third-person'));await step(page,0.1)
+  const eye=await page.evaluate(()=>window.__villager.eye('user-me'))
+  check('my own first person: matched to my eyes',Math.abs(fp-eye/1.5924)<0.01,{scale:r3(fp),eye:r3(eye)})
+  const hint=await page.evaluate(()=>window.__villager.hintText())
+  check('the key strip is on my screen',!!hint&&hint.includes('手を振る')&&hint.includes('ひとこと'),{hint})
+  const me=[0.9,0,1.6]
+  await view(page,[me[0]+1.2,1.35,me[2]+2.6],[me[0],1.0,me[2]])
+  // Z: wave
+  check('Z is taken by him',await press('KeyZ')===true)
+  for(let i=0;i<4;i++){await step(page,0.55);if(i===1)d=await B();await shot(page,'henshin-wave-'+i)}
+  check('Z: he waves (over the avatar pose)',d.gesture==='wave'&&d.status==='worn',{gesture:d.gesture})
+  await step(page,1.5)
+  // a key while a gesture runs is ignored; after it, X bows
+  await press('KeyX');await step(page,0.9);d=await B()
+  check('X: he bows',d.gesture==='bow',{gesture:d.gesture});await shot(page,'henshin-bow-0')
+  await step(page,2.2)
+  // C: a line, said with the voice and the jaw; shown on my strip
+  const blips0=(await report(page)).blips
+  await press('KeyC');let jaw=0
+  for(let i=0;i<10;i++){await step(page,0.2);const q=await B();jaw=Math.max(jaw,q.follow.jaw)}
+  const r=await report(page),strip=await page.evaluate(()=>window.__villager.hintText())
+  check('C: he says a line (voice and jaw), and I can read it',r.blips>blips0&&jaw>0.02&&strip.length>hint.length,{blips:r.blips-blips0,jaw:r3(jaw),strip})
+  await shot(page,'henshin-say-0')
+  await step(page,6)
+  // V: the next of his idle gestures each time
+  const seen=[]
+  for(let i=0;i<2;i++){await press('KeyV');await step(page,1.2);seen.push((await B()).gesture);await shot(page,'henshin-idle-'+i);await step(page,6.5)}
+  check('V: a different gesture each time',seen[0]&&seen[1]&&seen[0]!==seen[1],{seen})
+  // somebody else wears him: what they ask for arrives from the room; nobody else can make him do things
+  await page.evaluate(()=>window.__villager.wear('user-a'))
+  await step(page,0.5)
+  check('my keys do nothing when somebody else wears him',await press('KeyZ')===false)
+  await page.evaluate(()=>window.__villager.receive({a:'gesture',g:'wave',side:-1},'user-me'))
+  await step(page,0.6)
+  check('a request from someone who is not wearing him is ignored',(await B()).gesture==='')
+  await page.evaluate(()=>window.__villager.receive({a:'say',line:2},'user-a'))
+  await step(page,0.6)
+  d=await B()
+  const shown=await page.evaluate(()=>window.__villager.text(':worn'))
+  check('what the wearer says arrives: he speaks, and aiming at him shows the line',d.gesture==='talk'&&shown==='わたしは村人A。ただの村人さ。',{gesture:d.gesture,shown})
+  await view(page,[-1.0+1.2,1.35,1.5+2.6],[-1.0,1.0,1.5]);await shot(page,'henshin-other-0')
+  check('no key strip on my screen when I do not wear him',await page.evaluate(()=>window.__villager.hintText())===null)
+  await page.close()
+ },
 }
 
 const wanted=process.argv.slice(2)

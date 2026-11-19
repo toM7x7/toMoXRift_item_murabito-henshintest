@@ -6,13 +6,17 @@ import {MAT,VillagerActor,type ActorInput} from './villager/actor'
 import {playBlip} from './villager/audio'
 import {hash,seedOf} from './villager/brain'
 import {loadHuman} from './villager/model'
-import {CANNOT_WEAR,LINES,syllables,TALK_HINT,UNWEAR,WEAR} from './words'
+import {CANNOT_WEAR,HINT_TITLE,LINES,syllables,TALK_HINT,UNWEAR,WEAR,WORN_NAME} from './words'
+import {createAbilityInput,type Ability,type AbilityInput} from './henshin/abilities'
+import {IDLE_GESTURES,VILLAGER_ABILITIES,type ActPayload} from './henshin/villager'
+import {Html} from '@react-three/drei'
+import {createPortal} from '@react-three/fiber'
 import {WearBridge} from './wear'
 
 export interface ItemProps{position?:[number,number,number];scale?:number}
 
 /** Development only: the lab page can say where 'my' eyes are instead of the camera (dev.tsx). */
-type DevHook={eyes?:THREE.Vector3|null;actors?:Map<string,VillagerActor>;wear?:Map<string,WearBridge>;setWear?:Map<string,(who:string|null)=>void>}
+type DevHook={eyes?:THREE.Vector3|null;actors?:Map<string,VillagerActor>;wear?:Map<string,WearBridge>;setWear?:Map<string,(who:string|null)=>void>;fire?:Map<string,(ability:string)=>void>;act?:Map<string,(p:ActPayload,from:string)=>void>}
 const dev=()=>(globalThis as {__villagerDev?:DevHook}).__villagerDev
 
 const world=new THREE.Vector3(),feetV=new THREE.Vector3()
@@ -85,6 +89,55 @@ export function Item({position,scale=1}:ItemProps){
   m.set(id,who=>setWear(w=>({who,rev:w.rev+1})))
   return()=>{m.delete(id)}
  },[id,setWear])
+ // ---- what the wearer makes him do (henshin/villager.ts) ----
+ const runAct=useCallback((p:ActPayload,t0:number)=>{
+  const a=actorRef.current
+  if(!a)return
+  if(p.a==='say'&&typeof p.line==='number'&&p.line>=0&&p.line<LINES.length){a.talk(p.line,syllables(LINES[p.line]),t0,null);lineRef.current=p.line;setLine(p.line)}
+  else if(p.a==='gesture'&&p.g&&IDLE_GESTURES.concat(['wave','bow']).includes(p.g))a.act(p.g,t0,p.side===1?1:-1)
+ },[])
+ const emitAct=useInstanceEvent<ActPayload>(`villager-a:${id}:act`,({payload,senderId,timestamp})=>{
+  // only the person wearing him can make him do things
+  if(!payload||senderId!==wearRef.current.who)return
+  runAct(payload,(timestamp||now.current())/1000)
+ })
+ useEffect(()=>{
+  const m=dev()?.act
+  if(!m)return
+  m.set(id,(p,from)=>{if(from===wearRef.current.who)runAct(p,now.current()/1000)})
+  return()=>{m.delete(id)}
+ },[id,runAct])
+ const idleN=useRef(0)
+ const [fired,setFired]=useState<{id:string;seq:number}|null>(null)
+ const fire=useCallback((abilityId:string)=>{
+  const a=actorRef.current,b=bridge.current
+  if(!a||!b||b.status!=='worn'||wearRef.current.who!==localId)return
+  if(a.state.gesture)return
+  const t=now.current()/1000
+  let p:ActPayload
+  if(abilityId==='say'){
+   let n=Math.floor(hash(seedOf(id),Math.floor(t*10),93)*LINES.length)%LINES.length
+   if(n===a.state.line)n=(n+1)%LINES.length
+   p={a:'say',line:n}
+  }else if(abilityId==='wave')p={a:'gesture',g:'wave',side:-1}
+  else if(abilityId==='bow')p={a:'gesture',g:'bow',side:1}
+  else p={a:'gesture',g:IDLE_GESTURES[idleN.current++%IDLE_GESTURES.length],side:Math.floor(t)%2?1:-1}
+  runAct(p,t)
+  emitAct(p)
+  setFired(f=>({id:abilityId,seq:(f?.seq??0)+1}))
+ },[emitAct,id,localId,runAct])
+ const fireRef=useRef(fire)
+ fireRef.current=fire
+ const abilityInput=useRef<AbilityInput|null>(null)
+ const iWear=!!localId&&wear.who===localId&&!preview
+ useEffect(()=>{
+  if(!iWear)return
+  const inp=createAbilityInput(VILLAGER_ABILITIES,abilityId=>fireRef.current(abilityId))
+  abilityInput.current=inp
+  const m=dev()?.fire
+  m?.set(id,abilityId=>fireRef.current(abilityId))
+  return()=>{inp.dispose();abilityInput.current=null;m?.delete(id)}
+ },[iWear,id])
  const onMat=useCallback(()=>{
   if(!localId)return
   const w=wearRef.current
@@ -168,11 +221,17 @@ export function Item({position,scale=1}:ItemProps){
   }
   if(wearer&&b){
    feetV.set(wearer.mv.position.x,wearer.mv.position.y,wearer.mv.position.z)
-   b.set({userId:wearer.userId,isLocal:wearer.isLocal,feet:feetV,eyeHeight:wearer.eye,firstPerson:wearer.isLocal&&getViewpoint()==='first-person'})
+   b.set({userId:wearer.userId,isLocal:wearer.isLocal,feet:feetV,eyeHeight:wearer.eye,firstPerson:wearer.isLocal&&getViewpoint()==='first-person',t})
+   if(!a.worn)a.beginWorn()
    a.worn=true
+   ear.current.distance=feetV.distanceTo(state.camera.getWorldPosition(world))
+   if(wearer.isLocal)abilityInput.current?.pollXR(state.gl.xr.isPresenting?state.gl.xr.getSession():null)
+   if(lineRef.current!==null&&!a.speaking){lineRef.current=null;setLine(null)}
    // (drawn by the bridge at render time, only once the avatar has been read)
    if(b.status!=='worn')a.object.visible=false
    sn.lastFeet.copy(feetV);g.worldToLocal(sn.lastFeet);sn.lastYaw=b.measured.heading;sn.had=true
+   // what others aim at: a column where he stands
+   a.hit.position.set(sn.lastFeet.x,a.rig.info.height/2,sn.lastFeet.z)
    if(b.status!==wearStatus)setWearStatus(b.status)
    return
   }
@@ -199,6 +258,12 @@ export function Item({position,scale=1}:ItemProps){
      <primitive object={actor.hit}/>
     </Interactable>
    )}
+   {actor&&!preview&&wear.who&&wear.who!==localId&&wearStatus==='worn'&&(
+    <Interactable id={`${id}:worn`} onInteract={()=>{}} interactionText={line===null?WORN_NAME:LINES[line]}>
+     <primitive object={actor.hit}/>
+    </Interactable>
+   )}
+   {iWear&&wearStatus==='worn'&&<AbilityHint abilities={VILLAGER_ABILITIES} fired={fired} line={line===null?null:LINES[line]}/>}
    <Mat id={id} enabled={!preview&&!!localId&&(!wear.who||wear.who===localId)}
     text={wear.who===localId?(wearStatus==='unreadable'?CANNOT_WEAR+'／'+UNWEAR:UNWEAR):WEAR} onInteract={onMat}/>
   </group>
@@ -220,4 +285,31 @@ function Mat({id,enabled,text,onInteract}:{id:string;enabled:boolean;text:string
   </group>
  )
  return <Interactable id={`${id}:mat`} onInteract={onInteract} interactionText={text} enabled={enabled}>{mat}</Interactable>
+}
+
+// A strip at the bottom-right of the wearer's screen: what the keys make the body do, and what he just said (the
+// wearer cannot aim at their own body to read it). Drawn on the page, not in the room; nobody else sees it.
+const hintCss=`.xrift-villager-hint,.xrift-villager-hint *{pointer-events:none!important}
+.xrift-villager-hint .vh-bar{position:absolute;right:18px;bottom:18px;display:flex;flex-direction:column;align-items:flex-end;gap:5px;font:600 11px/1.2 "Yu Gothic",system-ui,sans-serif;color:#f3f6f4;user-select:none}
+.xrift-villager-hint .vh-keys{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(28,32,44,.62);border-radius:8px;white-space:nowrap}
+.xrift-villager-hint .vh-title{color:#f1dca6}
+.xrift-villager-hint kbd{font:700 10px system-ui,sans-serif;border:1px solid #c9d1e080;border-radius:3px;padding:1px 5px;color:#fff;margin-right:3px}
+.xrift-villager-hint .vh-key.fired{animation:vh-pop .45s cubic-bezier(.2,1.8,.4,1)}
+.xrift-villager-hint .vh-line{padding:6px 10px;background:rgba(250,246,236,.9);color:#3a3226;border-radius:8px;font-size:13px}
+@keyframes vh-pop{0%{transform:scale(.6)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
+@media(max-width:720px){.xrift-villager-hint .vh-bar{right:10px;bottom:10px}}`
+function AbilityHint({abilities,fired,line}:{abilities:Ability[];fired:{id:string;seq:number}|null;line:string|null}){
+ const camera=useThree(state=>state.camera)
+ const xr=useThree(state=>state.gl.xr)
+ if(xr.isPresenting)return null
+ return createPortal(<Html position={[0,0,-1]} fullscreen calculatePosition={(_el,_camera,size)=>[size.width/2,size.height/2]} wrapperClass="xrift-villager-hint">
+  <style>{hintCss}</style>
+  <div className="vh-bar" data-testid="villager-hint" role="note" aria-label="村人Aでできること">
+   {line&&<div className="vh-line">{line}</div>}
+   <div className="vh-keys">
+    <span className="vh-title">{HINT_TITLE}</span>
+    {abilities.map(ab=>{const hit=fired?.id===ab.id;return <span key={hit?ab.id+fired!.seq:ab.id} className={hit?'vh-key fired':'vh-key'}><kbd>{ab.keys[0].replace(/^Key/,'')}</kbd>{ab.label}</span>})}
+   </div>
+  </div>
+ </Html>,camera)
 }

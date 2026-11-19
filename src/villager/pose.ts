@@ -21,6 +21,7 @@ const ARM_KEYS=['o','u','f','r','e','t','wf','ws'] as const
  */
 function arm(p:Pose,side:1|-1,a:Partial<Arm>,k:number){
  const pre=side>0?'l':'r'
+ ARM_WEIGHT[pre]=Math.max(ARM_WEIGHT[pre],k)
  const lead=1-(1-k)*(1-k),lag=k*k
  for(const key of ARM_KEYS){
   const v=a[key]
@@ -34,7 +35,11 @@ function arm(p:Pose,side:1|-1,a:Partial<Arm>,k:number){
 export const SYLLABLE=0.13
 export const talkTime=(chars:number)=>0.35+chars*SYLLABLE+0.9
 
+/** after applyGesture: how much of each arm the gesture took (0..1). A worn body blends its arms by this. */
+export const ARM_WEIGHT={l:0,r:0}
+
 export function applyGesture(p:Pose,g:Gesture,t:number,chars=0){
+ ARM_WEIGHT.l=0;ARM_WEIGHT.r=0
  const ta=t-g.t0,d=g.dur,s=g.side
  if(ta<0||ta>d)return
  switch(g.name){

@@ -108,6 +108,31 @@ export class VillagerActor{
   this.skin.uniforms.uHideHead.value=0
  }
 
+ /** worn: start a gesture at shared time t0 (the wearer asked for it; every client runs the same) */
+ act(name:Exclude<GestureName,'talk'>,t0:number,side:1|-1=1){
+  this.gesture={name,t0,dur:GESTURE_DUR[name],side,key:Math.floor(t0*10)}
+  this.speaker=null
+ }
+
+ /** worn from now on: whatever he was doing as himself stops */
+ beginWorn(){this.gesture=null;this.speaker=null;this.state.gesture='';this.state.talking=false}
+ /** is he saying a line now (set as soon as talk() is called, not only once the next frame has run) */
+ get speaking(){return this.gesture?.name==='talk'}
+
+ /** worn: every frame instead of update(): ends gestures, plays the voice. The gesture being shown (or null). */
+ wornTick(t:number):{g:Gesture;chars:number}|null{
+  const st=this.state
+  let g=this.gesture
+  if(g&&(t>g.t0+g.dur||t<g.t0-1)){g=this.gesture=null;this.speaker=null}
+  st.gesture=g?g.name:''
+  st.talking=g?.name==='talk'
+  if(g&&g.name==='talk'){
+   const i=Math.floor((t-g.t0-0.35)/SYLLABLE)
+   if(i>=0&&i<this.chars&&i!==this.blip){this.blip=i;st.blips++;this.events.onBlip?.(i,this.chars)}
+  }
+  return g?{g,chars:this.chars}:null
+ }
+
  /** lab: start a gesture now */
  gestureNow(name:Exclude<GestureName,'talk'>,t:number,side:1|-1=1){
   this.gesture={name,t0:t,dur:GESTURE_DUR[name],side,key:0}

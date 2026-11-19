@@ -4,7 +4,9 @@ import {authoringRig} from './pose-lib/authoring/rig.mjs'
 import type {AuthoringRig} from './pose-lib/authoring/types.d.mts'
 import {prepareRig,type PreparedRig} from './pose-lib/vendor/render-pose.mjs'
 import type {VillagerActor} from './villager/actor'
-import type {Follow} from './villager/rig'
+import {POSE_KEYS,STAND,type Follow,type Pose} from './villager/rig'
+import {applyGesture,ARM_WEIGHT} from './villager/pose'
+import {Euler} from 'three'
 
 /**
  * Wearing the villager: whoever wears him keeps their own avatar, moved by the platform as always (walking, VR
@@ -27,7 +29,14 @@ export interface Wearer{
  eyeHeight:number|null
  /** the camera is in this avatar's head: the villager's head is folded away (not in mirrors) */
  firstPerson:boolean
+ /** shared clock, seconds (gestures start at shared times) */
+ t:number
 }
+/**
+ * How big the worn villager is. Everyone else (and the wearer in third person) sees him at his own size; only the
+ * wearer's own first-person view matches him to the avatar's eyes, because the platform puts the camera there.
+ */
+export const SIZE:'item'|'avatar'='item'
 export type WearStatus='off'|'searching'|'worn'|'unreadable'
 
 /** what authoringRig measures (more than its declared type says) */
@@ -80,6 +89,7 @@ function avatarMeshes(scene:Scene,skeletons:Set<Skeleton>):Object3D[]{
 const Y=new Vector3(0,1,0),Zv=new Vector3(0,0,1)
 const qa=new Quaternion(),qb=new Quaternion(),qHips=new Quaternion(),qChest=new Quaternion(),qHead=new Quaternion(),qFoot=new Quaternion(),qHand=new Quaternion(),qYaw=new Quaternion(),qChestInv=new Quaternion()
 const va=new Vector3(),vb=new Vector3(),vc=new Vector3(),hipsW=new Vector3()
+const GP={...STAND} as Pose,eu=new Euler()
 const rootM=new Matrix4(),rootInv=new Matrix4(),holderInv=new Matrix4()
 
 export class WearBridge{
@@ -87,7 +97,7 @@ export class WearBridge{
  /** what the last search found, for the dev page and the console */
  selection:ActorRigSelection|null=null
  /** dev and checks: the villager's scale and how far the feet missed */
- readonly measured={scale:1,reach:0,heading:0,hidden:0}
+ readonly measured={scale:1,reach:0,heading:0,hidden:0,gesture:''}
  /** dev: leave the avatar shown (to compare it with the villager drawn over it) */
  showAvatar=false
  private wearer:Wearer|null=null
@@ -186,7 +196,9 @@ export class WearBridge{
    const legW=b.leftUpperLeg.getWorldPosition(va).distanceTo(b.leftLowerLeg.getWorldPosition(vb))+vb.distanceTo(b.leftFoot.getWorldPosition(vc))
    const k=legW/Math.max(1e-6,info.legLength)
    const eyeW=w.eyeHeight??((info.hipHeight+info.restHeadLocal.y)*k+0.075*k*info.legLength/0.82)
-   const s=Math.max(0.3,Math.min(3,eyeW/vi.eyes[0][1]))
+   this.holder.getWorldScale(vc)
+   const own=w.isLocal&&w.firstPerson||SIZE==='avatar'
+   const s=own?Math.max(0.3,Math.min(3,eyeW/vi.eyes[0][1])):vc.x
    this.measured.scale=s
    // root: on the feet, turned the way the pelvis faces, at the avatar's size
    this.axes(b.hips,qHips)
@@ -236,8 +248,23 @@ export class WearBridge{
     leg.toe=-Math.asin(Math.max(-1,Math.min(1,vb.y)))
    }
    fo.jaw=0
-   fo.blink=actor.blinkAt(performance.now()/1000)
+   fo.blink=actor.blinkAt(w.t)
+   // a gesture the wearer asked for, laid over the avatar's own pose: the body by what it changes from standing,
+   // the arms it uses blended over the avatar's arms
+   const cur=actor.wornTick(w.t)
+   if(cur){
+    for(const key of POSE_KEYS)GP[key]=STAND[key]
+    applyGesture(GP,cur.g,w.t,cur.chars)
+    const D=(key:keyof Pose)=>GP[key]-STAND[key]
+    fo.pelvisQ.multiply(qb.setFromEuler(eu.set(D('pp'),D('pw'),-D('pr'),'YXZ')))
+    fo.pelvisOffset.x+=D('px');fo.pelvisOffset.y+=D('py');fo.pelvisOffset.z+=D('pz')
+    fo.spineQ.multiply(qb.setFromEuler(eu.set(D('sp'),D('sy'),-D('sr'),'YXZ')))
+    fo.headQ.multiply(qb.setFromEuler(eu.set(D('hp'),D('hy'),-D('hr'),'YXZ')))
+    fo.jaw=Math.max(0,D('jaw'))
+    this.measured.gesture=cur.g.name
+   }else this.measured.gesture=''
    rig.applyFollow(fo)
+   if(cur){rig.blendArm(0,GP,ARM_WEIGHT.r);rig.blendArm(1,GP,ARM_WEIGHT.l)}
    this.measured.reach=Math.max(rig.solved.reachL,rig.solved.reachR)
    actor.skin.uniforms.uHideHead.value=w.isLocal&&w.firstPerson?1:0
    // place him (the scene's matrices were updated before this render started)

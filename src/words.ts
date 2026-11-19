@@ -30,3 +30,9 @@ export const WEAR='村人Aになる'
 export const UNWEAR='村人Aをやめる'
 export const CANNOT_WEAR='村人Aになれません（アバターの骨を読めません）'
 export const WEARING_NOW='村人Aになっています'
+
+/** 村人Aになっている間にできること（キーの案内に出る） */
+export const ABILITY_LABELS={wave:'手を振る',bow:'お辞儀',say:'ひとこと',idle:'しぐさ'}
+export const HINT_TITLE='村人A'
+/** 村人Aになっている人に照準を合わせたとき（話していないとき） */
+export const WORN_NAME='村人A'

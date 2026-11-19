@@ -79,6 +79,8 @@ function frame(m:THREE.Matrix4,dir:THREE.Vector3,ref:THREE.Vector3){
  fx.crossVectors(fy,fz)
  return m.makeBasis(fx,fy,fz)
 }
+function fromRV(v:THREE.Vector3,out:THREE.Quaternion){const a=v.length();return a<1e-7?out.identity():out.setFromAxisAngle(tmpA.copy(v).multiplyScalar(1/a),a)}
+const tmpA=new THREE.Vector3(),bs=new THREE.Vector3(),bw=new THREE.Vector3(),bb=new THREE.Vector2(),qa1=new THREE.Quaternion(),qa2=new THREE.Quaternion()
 const fx=new THREE.Vector3(),fy=new THREE.Vector3(),fz=new THREE.Vector3(),fb=new THREE.Vector3(),palmR=new THREE.Vector3(),fingV=new THREE.Vector3(),palmV=new THREE.Vector3()
 const n1=new THREE.Vector3(),n2=new THREE.Vector3(),tmpV=new THREE.Vector3()
 const m1=new THREE.Matrix4(),m2=new THREE.Matrix4()
@@ -172,6 +174,18 @@ export class Rig{
    const reach=this.leg(i,l.ankle.x,l.ankle.y,l.ankle.z,l.toe,p)
    if(i)this.solved.reachL=reach;else this.solved.reachR=reach
   }
+ }
+
+ /** After applyFollow: turn arm i (0 right, 1 left) toward what Pose p asks of it, by k (a gesture over a worn body). */
+ blendArm(i:number,p:Pose,k:number){
+  if(k<=0)return
+  const u=this.u
+  bs.copy(u.uShoulderRV.value[i]);bw.copy(u.uWristRV.value[i]);bb.copy(u.uArmBend.value[i])
+  if(i)this.arm(1,p.lo,p.lu,p.lf,p.lr,p.le,p.lt,p.lwf,p.lws);else this.arm(0,p.ro,p.ru,p.rf,p.rr,p.re,p.rt,p.rwf,p.rws)
+  const kk=Math.min(1,k)
+  toRV(fromRV(bs,qa1).slerp(fromRV(u.uShoulderRV.value[i],qa2),kk),u.uShoulderRV.value[i])
+  toRV(fromRV(bw,qa1).slerp(fromRV(u.uWristRV.value[i],qa2),kk),u.uWristRV.value[i])
+  u.uArmBend.value[i].set(bb.x+(u.uArmBend.value[i].x-bb.x)*kk,bb.y+(u.uArmBend.value[i].y-bb.y)*kk)
  }
 
  /** One arm from the directions of its upper arm, forearm, fingers and palm (chest axes). */

@@ -28,8 +28,8 @@ const params=new URLSearchParams(location.search)
 const lab=params.has('lab')
 const ME:ItemPlacer={id:'user-me',displayName:'me',avatarUrl:null,isLocalUser:true}
 
-type DevHook={eyes:THREE.Vector3|null;actors:Map<string,VillagerActor>;wear:Map<string,WearBridge>;setWear:Map<string,(who:string|null)=>void>}
-const hook:DevHook={eyes:null,actors:new Map(),wear:new Map(),setWear:new Map()}
+type DevHook={eyes:THREE.Vector3|null;actors:Map<string,VillagerActor>;wear:Map<string,WearBridge>;setWear:Map<string,(who:string|null)=>void>;fire:Map<string,(a:string)=>void>;act:Map<string,(p:object,from:string)=>void>}
+const hook:DevHook={eyes:null,actors:new Map(),wear:new Map(),setWear:new Map(),fire:new Map(),act:new Map()}
 ;(globalThis as {__villagerDev?:DevHook}).__villagerDev=hook
 
 function Scenery({solid=false}:{solid?:boolean}){
@@ -124,9 +124,19 @@ function LabDriver(){
    /** ?lab&wear: who wears the villager (as if they had clicked the mat), or null */
    wear(who:string|null){[...hook.setWear.values()][0]?.(who)},
    bridge:()=>[...hook.wear.values()][0]??null,
+   /** press a key as the page would get it: true if something took it */
+   key(code:string,o:{ctrl?:boolean;alt?:boolean}={}){return !window.dispatchEvent(new KeyboardEvent('keydown',{code,ctrlKey:!!o.ctrl,altKey:!!o.alt,bubbles:true,cancelable:true}))},
+   /** ?lab&wear: the wearer (me) starts an ability ('wave','bow','say','idle'), as their key would */
+   ability(a:string){[...hook.fire.values()][0]?.(a)},
+   /** ?lab&wear: an ability arrives from somebody else, as the room would deliver it */
+   receive(p:object,from:string){[...hook.act.values()][0]?.(p,from)},
+   /** the key strip on the wearer's screen (text), or null */
+   hintText(){const el=document.querySelector('[data-testid="villager-hint"]');return el?el.textContent:null},
    /** ?lab&wear: move a mannequin (feet, yaw: the platform's, 0 = looking along -Z) and pick how it moves */
    avatar(id:string,o:{at?:number[];yaw?:number;motion?:string}){const d=dolls[id];if(!d)return;if(o.at){d.position.x=o.at[0];d.position.y=o.at[1];d.position.z=o.at[2]}if(o.yaw!==undefined)d.yaw=o.yaw;if(o.motion)d.motion=o.motion},
    keys:()=>KEY_NAMES,
+   /** the eye height the lab reports for a mannequin */
+   eye:(id:string)=>dolls[id]?.eye??null,
    /** where a mannequin's bone is (world) */
    bone(id:string,re:string){const root=scene.getObjectByName('dev-vrm-'+id);let p:number[]|null=null;const r=new RegExp(re,'i');root?.traverse(o=>{if(!p&&(o as THREE.Bone).isBone&&r.test(o.name))p=o.getWorldPosition(new THREE.Vector3()).toArray()});return p},
    /** are the mannequin's meshes shown (outside a render) */
